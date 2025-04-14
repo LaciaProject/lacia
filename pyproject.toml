@@ -1,7 +1,7 @@
 
 [project]
 name = "lacia"
-version = "0.2.0"
+version = "0.2.1"
 description = "A modern `Json-Rpc/Bson-Rpc` implementation, compatible with `Json-Rpc Ast` and `Json-Rpc 2.0` and `Json-Rpc X`, supports multiple network protocols and backend frameworks and supports bidirectional calls."
 authors = [
     {name = "luxuncang", email = "luxuncang@qq.com"},
@@ -27,7 +27,7 @@ classifiers = [
 ]
 
 [project.urls]
-repository = "https://github.com/luxuncang/lacia"
+repository = "https://github.com/LaciaProject/lacia"
 
 [build-system]
 requires = ["pdm-backend"]
@@ -53,14 +53,6 @@ fastapi = [
 includes = ["src/lacia"]
 
 [tool.pdm.scripts]
-client1.cmd = "python example/CtoC/client_1.py"
-client1.env = {PYTHONPATH = "src"}
-
-client.cmd = "python example/CtoC/client_2.py"
-client.env = {PYTHONPATH = "src"}
-
-server.cmd = "python example/CtoC/server.py"
-server.env = {PYTHONPATH = "src"}
 
 test.cmd = "python tests/jsonast.py"
 test.env = {PYTHONPATH = "src"}

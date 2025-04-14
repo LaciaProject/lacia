@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from lacia.logger import logger
 from lacia.standard.jsonast.runtime import RunTime, Standard, Namespace, JsonAst
@@ -8,11 +9,21 @@ from lacia.core.proxy import ProxyObj, ResultProxy
 async def test_aping(x):
     return f"pong: {x}"
 
+def test_iter(n):
+    for i in range(n):
+        time.sleep(0.1)
+        yield i
 
 async def test_async_iter(n):
     for i in range(n):
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.1)
         yield i
+
+async def test_async_iter_send(n):
+    j = 0
+    for i in range(n):
+        await asyncio.sleep(0.1)
+        j = yield i + j
 
 
 class TestJson:
@@ -34,6 +45,8 @@ namespace = {
     "test_aping": test_aping,
     "test_class_init": TestJson,
     "test_async_iter": test_async_iter,
+    "test_iter": test_iter,
+    "test_async_iter_send": test_async_iter_send,
     "Test": TestJson,
 }
 #  嵌套
@@ -124,7 +137,45 @@ class Test:
 
         assert r.c == {"c": 3}
 
+    async def test_async_iter(self):
+        runtime = Standard.runtime(namespace, ProxyObj, ResultProxy)
+        obj = ProxyObj()
+
+        astobj = obj.test_async_iter(3)._obj
+
+        r = await runtime.run(astobj)
+
+        assert [i async for i in r] == [0, 1, 2]
+
+    async def test_iter(self):
+        runtime = Standard.runtime(namespace, ProxyObj, ResultProxy)
+        obj = ProxyObj()
+
+        astobj = obj.test_iter(3)._obj
+
+        r = await runtime.run(astobj)
+
+        assert [i for i in r] == [0, 1, 2]
+
+    async def test_async_iter_send(self):
+        runtime = Standard.runtime(namespace, ProxyObj, ResultProxy)
+        obj = ProxyObj()
+
+        astobj = obj.test_async_iter_send(3)._obj
+
+        r = await runtime.run(astobj)
+
+        value = await r.asend(None)
+        assert value == 0
+        value = await r.asend(value + 1)
+        assert value == 2
+        value = await r.asend(value + 1)
+        assert value == 5
+
+
+
     async def main(self):
+
         for func in dir(self):
             if func.startswith("test_"):
                 await getattr(self, func)()
@@ -132,6 +183,7 @@ class Test:
 
 
 async def main():
+
     await Test().main()
 
 

@@ -20,6 +20,7 @@ def with_schema(obj, schema: Type[Schema]) -> Schema:
 class BaseProxy(Generic[T]):
     _jsonrpc: str
     _obj: T
+    _vision: bool
 
     def __await__(self):
         ...
@@ -150,22 +151,29 @@ class ResultProxy(BaseProxy):
         result: RpcMessage,
         core: Optional["JsonRpc[JsonAst]"] = None,
         by: Optional[str] = None,
+        vision: bool = True,
     ):
         self._core = core
         self._result = result
         self._by = by
         self._obj = None
+        self._vision = vision
 
     @property
     def visions(self):
+        return self._raise_result()
+
+    def _raise_result(self, vision: bool = True):
         if self._result.error:
             if self._result.error_code == JsonRpcCode.StopAsyncIterationError:
                 raise StopAsyncIteration
             raise JsonRpcRuntimeException(self._result.error)
-        return self._result.result
+        return self._result.result if vision else self
 
     def __getattr__(self, name: str) -> "ProxyObj":
-        return getattr(getattr(ProxyObj(self._core, self._by), self._result.id), name)  # type: ignore
+        return getattr(
+            getattr(ProxyObj(self._core, self._by, self._vision), self._result.id), name
+        )
 
     async def __aiter__(self):
         return self
@@ -183,4 +191,9 @@ class ResultProxy(BaseProxy):
             data = await self._core.reverse_run(self._by, obj)
         else:
             raise JsonRpcRuntimeException("server and client are None")
-        return data.visions
+        return data._raise_result(self._vision)
+
+
+def set_vision(result: ResultProxy, proxy: BaseProxy[BaseDataTrans]):
+    result._vision = proxy._vision
+    return result

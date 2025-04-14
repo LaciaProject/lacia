@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional, TypeVar, Generic
 from nest_asyncio import apply as nest_apply
 
 from lacia.core.abcbase import BaseJsonRpc
-from lacia.core.proxy import BaseProxy, ResultProxy, ProxyObj
+from lacia.core.proxy import BaseProxy, ResultProxy, ProxyObj, set_vision
 from lacia.network.abcbase import BaseServer, BaseClient
 from lacia.standard.abcbase import BaseDataTrans, Namespace
 from lacia.standard.execute import Standard
@@ -210,7 +210,9 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
 
         await event.wait()
 
-        return self._wait_result.pop(uuid_str)
+        res = self._wait_result.pop(uuid_str)
+        set_vision(res, proxy)
+        return res
 
     async def reverse_run(self, name: str, proxy: BaseProxy[BaseDataTrans]):
         uuid_str = str(uuid4())
@@ -237,7 +239,9 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
 
         await event.wait()
 
-        return self._wait_result.pop(uuid_str)
+        res = self._wait_result.pop(uuid_str)
+        set_vision(res, proxy)
+        return res
 
     async def _client_auth(
         self, event: asyncio.Event, qmgs: asyncio.Queue, websocket: T

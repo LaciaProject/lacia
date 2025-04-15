@@ -1,4 +1,4 @@
-import asyncio 
+import asyncio
 from typing import Optional
 
 import orjson
@@ -11,28 +11,37 @@ from lacia.types import Message
 from lacia.exception import JsonRpcWsConnectException
 
 
-
 class AioClient(BaseClient):
     def __init__(
         self,
         path: str = "",
         host: str = "localhost",
         port: int = 8080,
-        loop: Optional[asyncio.AbstractEventLoop] = None
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+        session: Optional[aiohttp.ClientSession] = None,
+        **kwargs,
     ) -> None:
         self.path = path
         self.host = host
         self.port = port
         self.loop = loop
+        self.session = session
+        self.kwargs = kwargs
 
     async def start(self) -> "AioClient":
-        self.session = aiohttp.ClientSession(loop=self.loop or asyncio.get_event_loop())
-        self.ws = await self.session.ws_connect(f"http://{self.host}:{self.port}{self.path}")
-        logger.success(f"📡 {self.__class__.__name__} success connected: http://{self.host}:{self.port}{self.path}.")
+        if self.session is None:
+            self.session = aiohttp.ClientSession(
+                loop=self.loop or asyncio.get_event_loop(), **self.kwargs
+            )
+        self.ws = await self.session.ws_connect(
+            f"http://{self.host}:{self.port}{self.path}"
+        )
+        logger.success(
+            f"📡 {self.__class__.__name__} success connected: http://{self.host}:{self.port}{self.path}."
+        )
         return self
 
     async def receive(self):
-
         try:
             async for data in self.ws:
                 if data.type == aiohttp.WSMsgType.close:
@@ -57,7 +66,7 @@ class AioClient(BaseClient):
         if data and data.type == aiohttp.WSMsgType.BINARY:
             return data.data
 
-    async def iter_json(self) :
+    async def iter_json(self):
         try:
             while True:
                 data = await self.receive_json()

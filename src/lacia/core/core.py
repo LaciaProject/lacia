@@ -67,11 +67,12 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
         self._server.on("disconnect", self.on_server_close)
         logger.info("run server")
 
-    async def _listening_client(self, websocket: T):
+    async def _listening_client(self, websocket: T, headers: dict[str, Any]):
         logger.info("listening client")
         Context.websocket.set(websocket)
         Context.namespace.set(self._namespace)
         Context.rpc.set(self)
+        Context.headers.set(headers)
         by_name: Optional[str] = None
 
         event = asyncio.Event()

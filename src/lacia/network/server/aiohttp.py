@@ -34,9 +34,11 @@ class AioServer(BaseServer[web.WebSocketResponse]):
 
         logger.success(f"{str(ws)} connected.")
 
+        headers = request.headers
+
         obj = self.on_events.get("connect")
         if obj is not None:
-            await obj.method(ws, *obj.args, **obj.kwargs)
+            await obj.method(ws, dict(headers), *obj.args, **obj.kwargs)
 
         await event.wait()
         return ws

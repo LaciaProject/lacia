@@ -77,3 +77,14 @@ class Context:
     name: ContextVar[str] = ContextVar("name")
     namespace: ContextVar[Namespace] = ContextVar("namespace")
     rpc: ContextVar = ContextVar("rpc")
+    headers: ContextVar[dict[str, Any]] = ContextVar("headers")
+
+    @classmethod
+    def get_cookie(cls) -> dict[str, Any]:
+        headers = cls.headers.get()
+        if headers is None:
+            return {}
+        cookie = headers.get("Cookie", {})
+        return {
+            k: v for k, v in (item.split("=", 1) for item in cookie.split("; "))
+        }

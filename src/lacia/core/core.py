@@ -55,7 +55,7 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
         self._standard.init_standard()
         self._client = client
         self._loop = self._loop or asyncio.get_event_loop()
-        client.add_headers(**{self._header_name: self._name})
+        client.add_headers(**{self._header_name.lower(): self._name})
         await client.start()
         if self._loop:
             self._loop.create_task(self._listening_server(self._client.ws))
@@ -80,7 +80,7 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
                 if self._server is not None:
                     await self._server.close_ws(websocket, "auth fail")
                 raise JsonRpcInitException("auth fail")
-        name = headers.get(self._header_name)
+        name = headers.get(self._header_name.lower())
         if name is None:
             raise JsonRpcInitException("auth fail")
         if token is None:

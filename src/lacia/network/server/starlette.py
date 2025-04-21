@@ -34,11 +34,13 @@ class StarletteServer(BaseServer[WebSocket]):
 
         logger.success(f"{str(websocket)} connected.")
 
-        headers = websocket.headers
+        headers = {}
+        for key, value in websocket.headers.items():
+            headers[key.lower()] = value
 
         obj = self.on_events.get("connect")
         if obj is not None and obj.method is not None:
-            await obj.method(websocket, dict(headers), *obj.args, **obj.kwargs)
+            await obj.method(websocket, headers, *obj.args, **obj.kwargs)
 
         await event.wait()
 

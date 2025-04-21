@@ -77,7 +77,7 @@ class Context:
         headers = cls.headers.get()
         if headers is None:
             return {}
-        cookie = headers.get("Cookie", {})
+        cookie = headers.get("cookie", {})
         return {
             k: v for k, v in (item.split("=", 1) for item in cookie.split("; "))
         }

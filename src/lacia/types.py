@@ -63,18 +63,11 @@ class RpcMessage:
     def is_response(self) -> bool:
         return "result" in self.data or "error" in self.data
 
-    @property
-    def is_auth(self) -> bool:
-
-        return all(
-            [
-                self.method["obj"] == {'obj': ["server", None], 'method': '__getattr__', 'args': ['rpc_auto_register'], 'kwargs': {}},
-            ]
-        )
 
 class Context:
     websocket: ContextVar = ContextVar("websocket")
     name: ContextVar[str] = ContextVar("name")
+    token: ContextVar[str] = ContextVar("token")
     namespace: ContextVar[Namespace] = ContextVar("namespace")
     rpc: ContextVar = ContextVar("rpc")
     headers: ContextVar[dict[str, Any]] = ContextVar("headers")

@@ -2,7 +2,7 @@ import asyncio
 import json
 import richuru
 from uuid import uuid4
-from typing import Dict, Any, Optional, TypeVar, Generic
+from typing import Dict, Any, Optional, TypeVar, Generic, Callable
 
 from nest_asyncio import apply as nest_apply
 
@@ -19,12 +19,14 @@ T = TypeVar("T")
 
 
 class JsonRpc(BaseJsonRpc, Generic[T]):
+    _header_name: str = "RPC_CLIENT_NAME"
+
     def __init__(
         self,
         name: str,
         execer: bool = True,
         namespace: Optional[Dict[str, Any]] = None,
-        token: Optional[str] = None,
+        auth_func: Optional[Callable[[dict[str, Any]], tuple[bool, str | None]]] = None,
         loop: Optional[asyncio.AbstractEventLoop] = None,
         debug: bool = False,
     ) -> None:
@@ -33,7 +35,7 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
         self._namespace = Namespace(
             globals=namespace if namespace else {},
         )
-        self._token = token
+        self._auth_func = auth_func
         self._loop = loop
         self._debug = debug
         self._uuid = str(uuid4())
@@ -53,6 +55,7 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
         self._standard.init_standard()
         self._client = client
         self._loop = self._loop or asyncio.get_event_loop()
+        client.add_headers(**{self._header_name: self._name})
         await client.start()
         if self._loop:
             self._loop.create_task(self._listening_server(self._client.ws))
@@ -67,48 +70,47 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
         self._server.on("disconnect", self.on_server_close)
         logger.info("run server")
 
+    async def _auth(self, websocket: T, headers: dict[str, Any]):
+        if self._auth_func is not None:
+            if asyncio.iscoroutinefunction(self._auth_func):
+                is_ok, token = await self._auth_func(headers)
+            else:
+                is_ok, token = self._auth_func(headers)
+            if not is_ok:
+                if self._server is not None:
+                    await self._server.close_ws(websocket, "auth fail")
+                raise JsonRpcInitException("auth fail")
+        name = headers.get(self._header_name)
+        if name is None:
+            raise JsonRpcInitException("auth fail")
+        if token is None:
+            raise JsonRpcInitException("auth fail")
+        return name, token
+
     async def _listening_client(self, websocket: T, headers: dict[str, Any]):
         logger.info("listening client")
+
+        name, token = await self._auth(websocket, headers)
+
         Context.websocket.set(websocket)
         Context.namespace.set(self._namespace)
         Context.rpc.set(self)
         Context.headers.set(headers)
-        by_name: Optional[str] = None
-
-        event = asyncio.Event()
-
-        def rpc_auto_register(name, token):
-            nonlocal by_name
-            if self._server is not None:
-                self._server.active_connections.set_name_ws(name, websocket)
-            Context.name.set(name)
-            by_name = name
-            if token == self._token:
-                event.set()
-                return self._name
-            raise JsonRpcInitException("rpc_auto_register fail")
+        Context.name.set(name)
+        Context.token.set(token)
 
         if self._namespace.locals.get(websocket) is None:
             self._namespace.locals[websocket] = {}
-        if self._server:
-            self._namespace.locals[websocket]["rpc_auto_register"] = rpc_auto_register
-
-        qmgs = asyncio.Queue()
-
-        if self._loop:
-            self._loop.create_task(self._client_auth(event, qmgs, websocket))
 
         if self._server is not None:
+            self._server.active_connections.set_name_ws(name, token, websocket)
             async for message in self._server.iter_json(websocket):
                 logger.debug(f"receive: {message}")
                 msg = RpcMessage(message)
                 if msg.is_request and self._execer and self._loop:
-                    if msg.is_auth:
-                        self._loop.create_task(self._s_execute(websocket, msg))
-                    else:
-                        qmgs.put_nowait(msg)
+                    asyncio.create_task(self._s_execute(websocket, msg))
                 elif msg.is_response:
-                    rmsg = ResultProxy(msg, core=self, by=by_name)  # type: ignore
+                    rmsg = ResultProxy(msg, core=self, by=name)  # type: ignore
                     self._wait_result[msg.id] = rmsg
                     self._wait_remote[msg.id].set()
         else:
@@ -120,13 +122,8 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
         Context.namespace.set(self._namespace)
         Context.rpc.set(self)
         Context.name.set(None)  # type: ignore
-
+        Context.token.set(None)  # type: ignore
         if self._client is not None:
-            if self._loop:
-                self._loop.create_task(
-                    self.run(ProxyObj().rpc_auto_register(self._name, self._token))
-                )
-
             async for message in self._client.iter_json():
                 logger.debug(f"receive: {message}")
                 msg = RpcMessage(message)
@@ -186,7 +183,8 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
         del self._namespace.locals[websocket]
 
     def on_server_close(self, websocket: T):
-        del self._namespace.locals[websocket]
+        if websocket in self._namespace.locals:
+            del self._namespace.locals[websocket]
 
     async def run(self, proxy: BaseProxy[BaseDataTrans]):
         uuid_str = str(uuid4())
@@ -230,10 +228,12 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
             "method": data,
         }
 
+
         if self._server is not None:
             logger.debug(f"send: {msg}")
             await self._server.send_json(
-                self._server.active_connections.get_ws(name), msg
+                self._server.active_connections.get_ws(f"{Context.token.get()}:{name}"),
+                msg,
             )
         else:
             raise JsonRpcInitException("server and client are None S")
@@ -243,16 +243,6 @@ class JsonRpc(BaseJsonRpc, Generic[T]):
         res = self._wait_result.pop(uuid_str)
         set_vision(res, proxy)
         return res
-
-    async def _client_auth(
-        self, event: asyncio.Event, qmgs: asyncio.Queue, websocket: T
-    ):
-        await event.wait()
-        if self._server is not None:
-            Context.name.set(self._server.active_connections.get_name(websocket))
-        while True:
-            msg = await qmgs.get()
-            await self._s_execute(websocket, msg)
 
     def _pretreatment(self, data: Any) -> Any:
         class BytesEncoder(json.JSONEncoder):

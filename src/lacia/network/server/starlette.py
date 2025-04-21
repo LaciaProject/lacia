@@ -25,7 +25,6 @@ class StarletteServer(BaseServer[WebSocket]):
         loop: Optional[asyncio.AbstractEventLoop] = None,
     ) -> None:
         self.active_connections: Connection[WebSocket] = Connection()
-        self.name_connections: Dict[str, WebSocket] = {}
         self.loop = loop
 
     async def websocket_handler(self, websocket: WebSocket):
@@ -113,13 +112,13 @@ class StarletteServer(BaseServer[WebSocket]):
     async def send_bytes(self, websocket: WebSocket, message: bytes):
         await websocket.send_bytes(message)
 
-    async def close_ws(self, websocket: WebSocket):
+    async def close_ws(self, websocket: WebSocket, message: str | None = None):
         name = str(websocket)
         obj = self.on_events.get("disconnect")
         if obj is not None and obj.method is not None:
             await obj.method(websocket, *obj.args, **obj.kwargs)
+        await websocket.close(code=1001, reason=message)
         self.disconnect(websocket)
-        await self.on_shutdown()
         logger.info(f"{name} disconnected.")
 
     async def on_shutdown(self):

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional
+from typing import Optional, Any
 
 import orjson
 import bson
@@ -19,6 +19,7 @@ class AioClient(BaseClient):
         port: int = 8080,
         loop: Optional[asyncio.AbstractEventLoop] = None,
         session: Optional[aiohttp.ClientSession] = None,
+        headers: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         self.path = path
@@ -27,11 +28,20 @@ class AioClient(BaseClient):
         self.loop = loop
         self.session = session
         self.kwargs = kwargs
+        self.headers = headers
 
-    async def start(self) -> "AioClient":
+    def _get_headers(self, **kwargs):
+        return {
+            **self.kwargs,
+            "headers": self.headers,
+            **kwargs,
+        }
+
+    async def start(self, **kwargs) -> "AioClient":
         if self.session is None:
             self.session = aiohttp.ClientSession(
-                loop=self.loop or asyncio.get_event_loop(), **self.kwargs
+                loop=self.loop or asyncio.get_event_loop(),
+                **self._get_headers(**kwargs),
             )
         self.ws = await self.session.ws_connect(
             f"http://{self.host}:{self.port}{self.path}"
@@ -112,3 +122,8 @@ class AioClient(BaseClient):
 
     def closed(self) -> bool:
         return self.ws.closed
+
+    def add_headers(self, **kwargs) -> None:
+        if self.headers is None:
+            self.headers = {}
+        self.headers = {**self.headers, **kwargs}

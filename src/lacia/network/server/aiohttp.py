@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, Dict, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 import orjson
 import bson
@@ -23,7 +23,6 @@ class AioServer(BaseServer[web.WebSocketResponse]):
         loop: Optional[asyncio.AbstractEventLoop] = None,
     ) -> None:
         self.active_connections: Connection[web.WebSocketResponse] = Connection()
-        self.name_connections: Dict[str, web.WebSocketResponse] = {}
         self.loop = loop
 
     async def websocket_handler(self, request):
@@ -116,11 +115,20 @@ class AioServer(BaseServer[web.WebSocketResponse]):
     async def send_bytes(self, websocket: web.WebSocketResponse, message: bytes):
         return await websocket.send_bytes(message)
 
-    async def close_ws(self, websocket: web.WebSocketResponse):
+    async def close_ws(
+        self, websocket: web.WebSocketResponse, message: str | None = None
+    ):
         name = str(websocket)
         obj = self.on_events.get("disconnect")
         if obj is not None:
-            await obj.method(websocket, *obj.args, **obj.kwargs)
+            if asyncio.iscoroutinefunction(obj.method):
+                await obj.method(websocket, *obj.args, **obj.kwargs)
+            else:
+                obj.method(websocket, *obj.args, **obj.kwargs)
+        await websocket.close(
+            code=WSCloseCode.GOING_AWAY,
+            message=message.encode() if isinstance(message, str) else b"",
+        )
         self.disconnect(websocket)
         logger.info(f"{name} disconnected.")
 

@@ -90,7 +90,7 @@ class RunTime(BaseRunTime[JsonAst]):
             elif asyncio.iscoroutinefunction(func):
                 return await func(*args, **kwargs)
             elif isinstance(obj, self.proxy):
-                return func(*args, **kwargs)
+                return (await func(*args, **kwargs)).visions
             return func(*args, **kwargs)
         elif isinstance(ast, self.proxy):
             return await ast

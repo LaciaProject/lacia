@@ -1,6 +1,6 @@
 import asyncio
 from abc import abstractmethod
-from typing import Optional, TypeVar, Generic, Generator, Dict, Callable
+from typing import Optional, TypeVar, Generic, Generator, Callable
 
 from lacia.types import Message
 from lacia.utils.tool import CallObj
@@ -10,14 +10,24 @@ T = TypeVar("T")
 
 class Connection(Generic[T]):
     def __init__(self):
-        self.ws: Dict[T, asyncio.Event] = {}
-        self.name_ws: Dict[str, T] = {}
+        self.ws: dict[T, asyncio.Event] = {}
+        self.name_ws: dict[str, T] = {}
+        self.token_ws: dict[str, set[str]] = {}
+
+    def _get_name(self, token: str, name: str) -> str:
+        return f"{token}:{name}"
 
     def set_ws(self, ws: T, event: asyncio.Event):
         self.ws[ws] = event
 
-    def set_name_ws(self, name: str, ws: T):
-        self.name_ws[name] = ws
+    def set_name_ws(self, name: str, token: str, ws: T):
+        self.set_token_ws(token, name)
+        self.name_ws[self._get_name(token, name)] = ws
+
+    def set_token_ws(self, token: str, name: str):
+        if token not in self.token_ws:
+            self.token_ws[token] = set()
+        self.token_ws[token].add(name)
 
     def clear_ws(self, ws: T):
         self.ws.pop(ws)
@@ -37,11 +47,13 @@ class Connection(Generic[T]):
                 return name
         raise KeyError("no such websocket")
 
+    def get_names_by_token(self, token: str) -> set[str]:
+        return self.token_ws[token]
+
 
 class BaseServer(Generic[T]):
     active_connections: Connection[T]
-    name_connections: Dict[str, T]
-    on_events: Dict[str, CallObj]
+    on_events: dict[str, CallObj]
 
     @abstractmethod
     async def receive(self, websocket: T) -> Message:
@@ -76,6 +88,10 @@ class BaseServer(Generic[T]):
 
     @abstractmethod
     async def start(self) -> "BaseServer":
+        ...
+
+    @abstractmethod
+    async def close_ws(self, websocket: T, message: str | None = None):
         ...
 
     @abstractmethod
@@ -125,7 +141,7 @@ class BaseClient(Generic[T]):
         ...
 
     @abstractmethod
-    async def start(self, *args, **kwargs) -> "BaseClient":
+    async def start(self, **kwargs) -> "BaseClient":
         ...
 
     @abstractmethod
@@ -134,4 +150,8 @@ class BaseClient(Generic[T]):
 
     @abstractmethod
     def closed(self) -> bool:
+        ...
+
+    @abstractmethod
+    def add_headers(self, **kwargs) -> None:
         ...

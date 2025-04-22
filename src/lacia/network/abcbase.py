@@ -95,6 +95,10 @@ class BaseServer(Generic[T]):
         ...
 
     @abstractmethod
+    async def on_shutdown(self):
+        ...
+
+    @abstractmethod
     def on(
         self,
         event: str,
